@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__Claude_Preview__preview_start",
+      "Bash(npx --yes netlify-cli --version)",
+      "Bash(dir \"C:\\\\Users\\\\noast\\\\Documents\\\\Claude\\\\ReutRehabApp\" /b /a-d)",
+      "Bash(findstr -v node_modules)",
+      "Bash(vercel --version)",
+      "Bash(netlify --version)",
+      "Bash(gh --version)",
+      "Bash(npx --version)"
+    ]
+  }
+}
