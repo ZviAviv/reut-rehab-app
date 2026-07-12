@@ -1,13 +1,13 @@
 
 import React, { useState, useMemo } from 'react';
-import { AppStage, ScheduleItem, TreatmentSummary, ChecklistItem } from './types';
+import { AppStage, ScheduleItem, TreatmentSummary, ChecklistItem, Notification, FAQItem } from './types';
 
 import StatusProgress from './components/StatusProgress';
 import WidgetCard from './components/WidgetCard';
-import { MOCK_CHECKLIST, MOCK_SCHEDULE, MOCK_FAQ } from './constants';
+import { MOCK_CHECKLIST, MOCK_SCHEDULE, MOCK_FAQ, MOCK_NOTIFICATIONS, STAGES } from './constants';
 
-type Tab = 'home' | 'info' | 'personal' | 'notebook' | 'exercises' | 'checklist' | 'faq' | 'treatment-summary';
-type InfoSubView = 'grid' | 'team' | 'ward' | 'who-to-contact' | 'public-enquiries' | 'constipation' | 'about-reut' | 'therapeutic-contract' | 'meeting-patients' | 'service-basket' | 'home-instructions' | 'home-release-info' | 'home-exercises' | 'home-prep-hub' | 'prep-video' | 'prep-tips' | 'prep-continuum' | 'prep-social' | 'prep-rights' | 'prep-sexuality' | 'prep-date-info' | 'sleep' | 'pain' | 'stress' | 'sexuality' | 'social-rights' | 'sb-physio-equip' | 'sb-yoga' | 'sb-comp-med' | 'sb-equip-rent' | 'sb-security' | 'sb-stay-permit' | 'sb-research' | 'sb-xray' | 'sb-tv';
+type Tab = 'home' | 'assistant' | 'hospital' | 'difficulties' | 'goals-exercises' | 'medical' | 'notebook' | 'exercises' | 'checklist' | 'faq';
+type InfoSubView = 'grid' | 'hospital-home' | 'diff-home' | 'team' | 'ward' | 'who-to-contact' | 'public-enquiries' | 'constipation' | 'about-reut' | 'therapeutic-contract' | 'meeting-patients' | 'service-basket' | 'home-instructions' | 'home-release-info' | 'home-exercises' | 'home-prep-hub' | 'prep-video' | 'prep-tips' | 'prep-continuum' | 'prep-social' | 'prep-rights' | 'prep-sexuality' | 'prep-date-info' | 'sleep' | 'pain' | 'stress' | 'sexuality' | 'fatigue' | 'anxiety' | 'social-rights' | 'sb-physio-equip' | 'sb-yoga' | 'sb-comp-med' | 'sb-equip-rent' | 'sb-security' | 'sb-stay-permit' | 'sb-research' | 'sb-xray' | 'sb-tv';
 
 interface OtherPatient {
   id: string;
@@ -349,14 +349,66 @@ const App: React.FC = () => {
   const [showPhysioReminder, setShowPhysioReminder] = useState(false);
   const [showDaySummary, setShowDaySummary] = useState(false);
   const [scheduleView, setScheduleView] = useState<'today' | 'tomorrow' | 'weekly'>('today');
-  const [personalSubTab, setPersonalSubTab] = useState<'medical' | 'goals'>('medical');
   const [chatInput, setChatInput] = useState('');
   const [chatMessages, setChatMessages] = useState<{id: number, sender: 'user'|'bot', text: string}[]>([]);
   const [isVoiceRecording, setIsVoiceRecording] = useState(false);
-  const [showStageProgress, setShowStageProgress] = useState(true);
   const [showStageInfo, setShowStageInfo] = useState(false);
   const [daySummaryMood, setDaySummaryMood] = useState<string | null>(null);
   const [viewingSessionSummary, setViewingSessionSummary] = useState<string | null>(null);
+
+  // Navigation: sidebar drawer + stage-change axis
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [stageJustChanged, setStageJustChanged] = useState(false);
+  const [geTab, setGeTab] = useState<'goals' | 'exercises' | 'notebook'>('exercises');
+  const [landingSearch, setLandingSearch] = useState('');
+
+  // Updates & reminders center
+  const [notifications, setNotifications] = useState<Notification[]>(MOCK_NOTIFICATIONS);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [showAllNotifications, setShowAllNotifications] = useState(false);
+  const unreadCount = useMemo(() => notifications.filter(n => !n.read).length, [notifications]);
+
+  // Success feedback ("כל הכבוד")
+  const [toast, setToast] = useState<string | null>(null);
+  const [celebrationStage, setCelebrationStage] = useState<AppStage | null>(null);
+  const [celebratedStages, setCelebratedStages] = useState<AppStage[]>([]);
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    window.setTimeout(() => setToast(prev => (prev === msg ? null : prev)), 2600);
+  };
+
+  const openNotifications = () => {
+    setNotificationsOpen(true);
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+  };
+
+  const changeStage = (stage: AppStage) => {
+    setSidebarOpen(false);
+    if (stage !== currentStage) {
+      setCurrentStage(stage);
+      setStageJustChanged(true);
+      setActiveTab('home');
+    }
+  };
+
+  // Personal goals (stateful — modeled on exercisesList)
+  const [goalsList, setGoalsList] = useState([
+    { id: 'g1', discipline: 'ריפוי בעיסוק', icon: '👕', text: 'לבישת חולצה באופן עצמאי', completed: false },
+    { id: 'g2', discipline: 'ריפוי בעיסוק', icon: '👕', text: 'שימוש במקלדת למשך 15 דקות', completed: false },
+    { id: 'g3', discipline: 'קלינאות תקשורת', icon: '🗣️', text: 'בליעה בטוחה של נוזלים', completed: false },
+    { id: 'g4', discipline: 'קלינאות תקשורת', icon: '🗣️', text: 'דיבור ברור בשיחת טלפון', completed: false },
+    { id: 'g5', discipline: 'ריפוי בעיסוק', icon: '🍽️', text: 'אכילה ללא עזרה', completed: true },
+  ]);
+
+  const toggleGoal = (id: string) => {
+    setGoalsList(prev => prev.map(g => {
+      if (g.id !== id) return g;
+      const nowCompleted = !g.completed;
+      if (nowCompleted) showToast('כל הכבוד! השגת יעד 🎉');
+      return { ...g, completed: nowCompleted };
+    }));
+  };
 
   const sessionSummaries: Record<string, TreatmentSummary> = useMemo(() => ({
     's2': {
@@ -387,13 +439,18 @@ const App: React.FC = () => {
   const [isEditingNote, setIsEditingNote] = useState(false);
   const [exerciseFilter, setExerciseFilter] = useState<'today' | 'all'>('today');
   const [exercisesList, setExercisesList] = useState([
-    { id: 'ex1', category: 'פיזיותרפיה', title: 'פיזיותרפיה נשימתית', type: 'wisecare', icon: '🫁', completed: false },
-    { id: 'ex2', category: 'פיזיותרפיה', title: 'חיזוק קרסוליים', type: 'page', icon: '🦶', completed: false },
-    { id: 'ex3', category: 'ריפוי בעיסוק', title: 'לבישת חולצה - תרגול רצף', type: 'page', icon: '👕', completed: true }
+    { id: 'ex1', category: 'פיזיותרפיה', title: 'פיזיותרפיה נשימתית', type: 'wisecare', icon: '🫁', completed: false, forToday: true },
+    { id: 'ex2', category: 'פיזיותרפיה', title: 'חיזוק קרסוליים', type: 'page', icon: '🦶', completed: false, forToday: true },
+    { id: 'ex3', category: 'ריפוי בעיסוק', title: 'לבישת חולצה - תרגול רצף', type: 'page', icon: '👕', completed: true, forToday: false }
   ]);
 
   const toggleExercise = (id: string) => {
-    setExercisesList(prev => prev.map(ex => ex.id === id ? { ...ex, completed: !ex.completed } : ex));
+    setExercisesList(prev => prev.map(ex => {
+      if (ex.id !== id) return ex;
+      const nowCompleted = !ex.completed;
+      if (nowCompleted) showToast('כל הכבוד! השלמת תרגיל 💪');
+      return { ...ex, completed: nowCompleted };
+    }));
   };
 
   const currentChecklist = useMemo(() => checklist[currentStage] || [], [checklist, currentStage]);
@@ -416,9 +473,18 @@ const App: React.FC = () => {
         const stageKey = stage as AppStage;
         const itemIdx = newChecklist[stageKey].findIndex(i => i.id === id);
         if (itemIdx > -1) {
+          const wasCompleted = newChecklist[stageKey][itemIdx].completed;
           const newItems = [...newChecklist[stageKey]];
-          newItems[itemIdx] = { ...newItems[itemIdx], completed: !newItems[itemIdx].completed };
+          newItems[itemIdx] = { ...newItems[itemIdx], completed: !wasCompleted };
           newChecklist[stageKey] = newItems;
+          if (!wasCompleted) {
+            showToast('כל הכבוד! סימנת משימה ✓');
+            // Celebrate when the whole current-stage list is completed
+            if (stageKey === currentStage && newItems.length > 0 && newItems.every(i => i.completed) && !celebratedStages.includes(stageKey)) {
+              setCelebrationStage(stageKey);
+              setCelebratedStages(cs => [...cs, stageKey]);
+            }
+          }
           break;
         }
       }
@@ -550,6 +616,114 @@ const App: React.FC = () => {
     </button>
   );
 
+  // Reusable FAQ block (shown in medical file, difficulty pages, and assistant)
+  const renderFaq = (items: FAQItem[], heading: string = 'שאלות נפוצות') => (
+    <div className="space-y-2 text-right" dir="rtl">
+      <h3 className="text-sm font-bold text-blue-600 flex items-center gap-1.5">
+        <span>💡</span> {heading}
+      </h3>
+      {items.length === 0 ? (
+        <p className="text-gray-400 text-xs text-center py-4">אין שאלות נפוצות זמינות.</p>
+      ) : (
+        items.map(faq => (
+          <details key={faq.id} className="group bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <summary className="p-3 font-medium text-sm text-gray-800 cursor-pointer flex items-center justify-between list-none [&::-webkit-details-marker]:hidden">
+              <span className="text-right flex-1">{faq.question}</span>
+              <svg className="w-4 h-4 text-blue-500 transform group-open:rotate-180 transition-transform shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+            </summary>
+            <div className="p-3 pt-0 text-sm text-gray-600 leading-relaxed border-t border-gray-50">
+              {faq.answer}
+            </div>
+          </details>
+        ))
+      )}
+    </div>
+  );
+
+  // Difficulty pages content (title, intro, self-help tips + FAQ)
+  const DIFFICULTY_CONTENT: Record<string, { title: string; icon: string; intro: string; tips: string[]; faqs: FAQItem[] }> = {
+    pain: {
+      title: 'התמודדות עם כאב', icon: '🤕',
+      intro: 'כאב הוא חלק שכיח בתהליך השיקום. חשוב לדווח לצוות על כל שינוי בעוצמת הכאב — יש דרכים רבות להקל עליך.',
+      tips: ['דווח לאחות על עוצמת הכאב בסולם 1-10', 'שמור על תנוחות נכונות בישיבה ובשכיבה', 'שלב מנוחה בין הטיפולים', 'שאל את הרופא על התאמת מינון משככי הכאבים'],
+      faqs: [
+        { id: 'pain_f1', question: 'מתי כדאי לפנות לצוות בגלל כאב?', answer: 'בכל כאב חדש, כאב שמתגבר, או כאב שמפריע לשינה או לתפקוד — פנה מיד לאחות התורנית.' },
+        { id: 'pain_f2', question: 'האם אפשר לקבל טיפול לא-תרופתי לכאב?', answer: 'כן. קיימים טיפולי חום/קור, פיזיותרפיה, ותרגילי נשימה והרפיה. שוחח עם הצוות על האפשרויות המתאימות לך.' },
+      ],
+    },
+    fatigue: {
+      title: 'התמודדות עם עייפות', icon: '😴',
+      intro: 'עייפות היא תגובה טבעית למאמץ השיקומי ולריפוי הגוף. ניהול נכון של אנרגיה יעזור לך להפיק את המרב מהטיפולים.',
+      tips: ['תכנן את הפעילויות החשובות לשעות שבהן אתה ער יותר', 'שלב הפסקות מנוחה קצרות במהלך היום', 'הקפד על שתייה ותזונה מספקת', 'שתף את הצוות אם העייפות מחמירה'],
+      faqs: [
+        { id: 'fat_f1', question: 'האם עייפות מעידה על בעיה רפואית?', answer: 'לרוב העייפות נובעת מהמאמץ ומהריפוי, אך אם היא קיצונית או פתאומית — כדאי לדווח לצוות הרפואי כדי לשלול סיבות אחרות.' },
+        { id: 'fat_f2', question: 'איך אפשר לשפר את רמת האנרגיה?', answer: 'שינה איכותית, פעילות מדורגת, תזונה מאוזנת והפסקות מנוחה מתוכננות מסייעות. הפיזיותרפיסט יכול להתאים לך קצב פעילות.' },
+      ],
+    },
+    sexuality: {
+      title: 'זוגיות ומיניות', icon: '❤️',
+      intro: 'מיניות וזוגיות הן חלק טבעי מהחיים גם בתהליך השיקום. אפשר וכדאי לשוחח על כך עם הצוות — בדיסקרטיות מלאה.',
+      tips: ['אין שאלה "מביכה" — הצוות כאן כדי לעזור', 'ניתן לבקש שיחה אישית עם עו"ס או רופא', 'שינויים תפקודיים ניתנים לרוב להתאמה ופתרון'],
+      faqs: [
+        { id: 'sex_f1', question: 'עם מי אפשר לשוחח בנושא?', answer: 'ניתן לפנות לעובדת הסוציאלית, לרופא המטפל או לאחות. השיחה חסויה ומכבדת.' },
+      ],
+    },
+    anxiety: {
+      title: 'התמודדות עם חרדה', icon: '🧘',
+      intro: 'תחושות של חרדה ומתח נפוצות בתקופת האשפוז. אתה לא לבד — הצוות כאן כדי ללוות ולתמוך בך.',
+      tips: ['תרגילי נשימה איטית מסייעים להרגעה מיידית', 'שתף את העו"ס או האחות בתחושות שלך', 'שמירה על שגרה וקשרים חברתיים מפחיתה מתח', 'בקש הפניה לתמיכה נפשית בעת הצורך'],
+      faqs: [
+        { id: 'anx_f1', question: 'האם אפשר לקבל ליווי נפשי במהלך האשפוז?', answer: 'בהחלט. ניתן לבקש מהעו"ס הפניה לפסיכולוג או לתמיכה רגשית מתאימה.' },
+        { id: 'anx_f2', question: 'מה עושים בהתקף חרדה?', answer: 'נסה לנשום לאט ועמוק, מצא מקום שקט, וקרא לאחות. הצוות מיומן בסיוע במצבים כאלה.' },
+      ],
+    },
+  };
+
+  const renderDifficultyPage = (key: string) => {
+    const d = DIFFICULTY_CONTENT[key];
+    if (!d) return null;
+    return (
+      <div className="space-y-4 animate-in slide-in-from-left-4 duration-300 text-right" dir="rtl">
+        <h2 className="text-lg font-bold text-blue-600 flex items-center gap-2"><span className="text-2xl">{d.icon}</span>{d.title}</h2>
+        <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-100">
+          <p className="text-sm font-bold text-gray-700 leading-relaxed">{d.intro}</p>
+        </div>
+        <div>
+          <h3 className="font-semibold text-gray-500 text-sm mb-3">מה ניתן לעשות?</h3>
+          <div className="space-y-2">
+            {d.tips.map((tip, i) => (
+              <div key={i} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-start gap-3">
+                <span className="text-blue-400 mt-0.5 shrink-0 font-bold">•</span>
+                <p className="text-sm text-gray-700 leading-relaxed">{tip}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="pt-2">{renderFaq(d.faqs)}</div>
+      </div>
+    );
+  };
+
+  // Route an info sub-view to the correct top-level tab
+  const DIFFICULTY_VIEWS = ['pain', 'fatigue', 'constipation', 'sexuality', 'anxiety', 'sleep', 'stress'];
+  const openInfoView = (view: InfoSubView | 'faq') => {
+    if (view === 'faq') { setActiveTab('faq'); return; }
+    if (DIFFICULTY_VIEWS.includes(view)) { setActiveTab('difficulties'); setInfoSubView(view as InfoSubView); return; }
+    if (view === 'grid') { setActiveTab('hospital'); setInfoSubView('about-reut'); return; }
+    setActiveTab('hospital');
+    setInfoSubView(view as InfoSubView);
+  };
+
+  // Icon + label per notification category (updates center)
+  const NOTIF_META: Record<string, { icon: string; label: string }> = {
+    action: { icon: '📌', label: 'תזכורת לפעולה' },
+    'day-summary': { icon: '☀️', label: 'סיכום יום' },
+    appointment: { icon: '📅', label: 'מפגש / בדיקה' },
+    'team-update': { icon: '🧑‍⚕️', label: 'עדכון מהצוות' },
+    exercise: { icon: '🏋️', label: 'תרגול מומלץ' },
+    'rehab-info': { icon: '💡', label: 'מידע שיקומי' },
+  };
+
   const renderContent = () => {
     switch (activeTab) {
       case 'home':
@@ -581,126 +755,108 @@ const App: React.FC = () => {
           { label: 'מפת בי"ח', icon: '📍', view: 'grid' as InfoSubView },
         ];
 
+        const tasksTitle = isAdmissionStage ? 'המשימות שלי לשלב הקבלה' : 'המשימות שלי להיום';
+        const topUpdate = notifications[0];
+        const typeIcons: Record<string, string> = { treatment: '🩺', meal: '🍽️', break: '☕', exercise: '🏋️' };
+
         return (
-          <div className="space-y-3 animate-in fade-in duration-300 text-right" dir="rtl">
-            <div className="space-y-1">
-              <h2 className="text-lg font-bold text-gray-900 leading-tight">
-                ערב טוב ישראל 🌙
-              </h2>
-              <p className="text-sm font-medium text-gray-600">
-                שלב טיפול נוכחי: <span className="text-blue-600 font-semibold">{currentStage}</span>, מועד שחרור: <span className="text-blue-600 font-semibold">{isPreHomeStage ? '23.05.2024' : 'טרם נקבע'}</span>
-              </p>
-            </div>
-            
-            {showStageProgress && (
-              <StatusProgress currentStage={currentStage} onStageChange={setCurrentStage} onClose={() => setShowStageProgress(false)} />
+          <div className="space-y-4 animate-in fade-in duration-300 text-right" dir="rtl">
+            {/* Stage-change axis — shown only right after switching stages */}
+            {stageJustChanged && (
+              <div className="space-y-2 animate-in slide-in-from-top-4 duration-500">
+                <div className="bg-blue-50 rounded-2xl border border-blue-100 px-4 py-2 flex items-center gap-2">
+                  <span className="text-lg">🎉</span>
+                  <p className="text-sm font-semibold text-blue-800">עברת לשלב: {currentStage}</p>
+                </div>
+                <StatusProgress currentStage={currentStage} onStageChange={setCurrentStage} onClose={() => setStageJustChanged(false)} />
+              </div>
             )}
 
             {isPreHomeStage && (
-              <div className="bg-blue-50 p-3 rounded-2xl border border-blue-100 shadow-sm animate-in slide-in-from-top-4 duration-500">
-                <p className="text-sm font-semibold text-blue-800 leading-snug">
-                  הצוות עדכן את תאריך החזרה הביתה שלך!
-                </p>
-                <p className="text-xs text-blue-600 mt-1 leading-relaxed">
-                  מוזמן לקרוא את המידע שיסייע לך בהכנה ולבצע את המשימות הנדרשות.
-                </p>
+              <div className="bg-blue-50 p-3 rounded-2xl border border-blue-100 shadow-sm">
+                <p className="text-sm font-semibold text-blue-800 leading-snug">הצוות עדכן את תאריך החזרה הביתה שלך!</p>
+                <p className="text-xs text-blue-600 mt-1 leading-relaxed">מוזמן לקרוא את המידע שיסייע לך בהכנה ולבצע את המשימות הנדרשות.</p>
               </div>
             )}
 
             {isPreAdmissionStage && (
-              <div className="mt-3 animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-3">
-                 <div className="space-y-3">
-                   <div className="aspect-video bg-gray-900 rounded-2xl flex items-center justify-center overflow-hidden shadow-lg border-4 border-white relative cursor-pointer group">
-                       <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors"></div>
-                       <div className="text-white text-center relative z-10">
-                           <div className="w-14 h-14 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-2 backdrop-blur-sm group-hover:scale-110 transition-transform">
-                               <span className="text-2xl">▶️</span>
-                           </div>
-                           <p className="font-medium text-sm">היכרות עם בית החולים</p>
-                       </div>
-                   </div>
-                 </div>
-                 {renderChecklistWidget(currentChecklist, 'רשימת הכנות להגעה', false)}
+              <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-3">
+                <div className="aspect-video bg-gray-900 rounded-2xl flex items-center justify-center overflow-hidden shadow-lg border-4 border-white relative cursor-pointer group">
+                  <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors"></div>
+                  <div className="text-white text-center relative z-10">
+                    <div className="w-14 h-14 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-2 backdrop-blur-sm group-hover:scale-110 transition-transform">
+                      <span className="text-2xl">▶️</span>
+                    </div>
+                    <p className="font-medium text-sm">היכרות עם בית החולים</p>
+                  </div>
+                </div>
+                {renderChecklistWidget(currentChecklist, 'רשימת הכנות להגעה', false)}
               </div>
             )}
-            
-            <div className="flex flex-col gap-3">
-              {isPreHomeStage && (
-                <div className="p-3 bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-col items-center justify-center text-center gap-2">
-                  <span className="text-xs font-semibold text-gray-500 uppercase tracking-widest">סטטוס אישור יציאה</span>
-                  {isReleaseApproved ? (
-                    <div className="flex items-center gap-2 bg-green-50 text-green-700 px-3 py-1.5 rounded-2xl border border-green-100 animate-in zoom-in duration-500">
-                       <span className="text-base">✅</span>
-                       <span className="font-semibold text-sm">התקבל אישור יציאה הביתה</span>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center gap-1">
-                      <div className="flex items-center gap-2 bg-red-50 text-red-600 px-3 py-1.5 rounded-2xl border border-red-100 animate-pulse">
-                        <span className="text-base">⏳</span>
-                        <span className="font-semibold text-sm">טרם התקבל אישור יציאה הביתה</span>
-                      </div>
-                      <p className="text-xs text-gray-400 mt-1">האישור יתקבל לאחר סיום כל התדרוכים הנדרשים בצ'קליסט.</p>
-                    </div>
-                  )}
+
+            {/* ===== Zone A: what's happening today (not in my control) ===== */}
+            {!isPreAdmissionStage && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 px-1">
+                  <span className="text-base">🔔</span>
+                  <h3 className="text-sm font-bold text-gray-500">מה קורה היום</h3>
                 </div>
-              )}
 
-              {!isPreAdmissionStage && isAdmissionStage && (
-                <>{renderChecklistWidget(currentChecklist, 'צ\'קליסט תהליך קבלה', false)}</>
-              )}
-
-              {!isPreAdmissionStage && !isAdmissionStage && (
-                <>
-                  {currentStage !== AppStage.REHAB_ROUTINE && (
-                    <WidgetCard
-                      noHeaderBorder
-                      title={
-                        <div className="flex flex-col gap-1 w-full text-right py-1">
-                          <span className="text-gray-800 text-sm font-semibold">המשימות שלי לביצוע בשלב זה</span>
-                        </div>
-                      }
-                      icon={<span className="text-blue-500 font-semibold">✓</span>}
-                    >
-                      <div className="w-full bg-gray-100 h-2.5 rounded-full overflow-hidden mt-1">
-                        <div className="h-full bg-blue-600 transition-all duration-1000" style={{ width: `${completionPercentage}%` }} />
-                      </div>
-                      <button onClick={() => setActiveTab('checklist')} className="text-blue-600 text-xs font-semibold mt-2.5 block text-right">צפייה בכל המשימות ({completionPercentage}%)</button>
-                    </WidgetCard>
-                  )}
-
-                  <WidgetCard
-                    title="לו״ז יומי"
-                    icon="📅"
-                    action={
-                      <div className="flex items-center gap-0.5 bg-gray-100 rounded-lg p-0.5">
-                        <button onClick={() => setScheduleView('today')} className={`text-[10px] font-semibold px-2 py-1 rounded-md transition-all ${scheduleView === 'today' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'}`}>היום</button>
-                        <button onClick={() => setScheduleView('tomorrow')} className={`text-[10px] font-semibold px-2 py-1 rounded-md transition-all ${scheduleView === 'tomorrow' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'}`}>מחר</button>
-                        <button onClick={() => setScheduleView('weekly')} className={`text-[10px] font-semibold px-2 py-1 rounded-md transition-all ${scheduleView === 'weekly' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'}`}>שבועי</button>
-                      </div>
-                    }
+                {/* Updates & reminders preview */}
+                {topUpdate && (
+                  <button
+                    onClick={openNotifications}
+                    className="w-full bg-white rounded-2xl border border-gray-100 shadow-sm p-3 flex items-center gap-3 text-right hover:bg-blue-50/40 transition-colors"
                   >
-                    {scheduleView === 'today' && (
-                      <div className="space-y-1.5">
-                        {schedule.map((item) => (
+                    <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-xl shrink-0">{NOTIF_META[topUpdate.category]?.icon}</div>
+                    <div className="flex-1 overflow-hidden">
+                      <p className="text-sm font-semibold text-gray-900 truncate">{topUpdate.title}</p>
+                      <p className="text-xs text-gray-500 truncate">{topUpdate.content}</p>
+                    </div>
+                    {unreadCount > 0 && <span className="bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center shrink-0">{unreadCount}</span>}
+                  </button>
+                )}
+
+                {/* Daily schedule — timeline (not a checklist) */}
+                <WidgetCard
+                  title="לו״ז יומי"
+                  icon="📅"
+                  action={
+                    <div className="flex items-center gap-0.5 bg-gray-100 rounded-lg p-0.5">
+                      <button onClick={() => setScheduleView('today')} className={`text-[10px] font-semibold px-2 py-1 rounded-md transition-all ${scheduleView === 'today' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'}`}>היום</button>
+                      <button onClick={() => setScheduleView('tomorrow')} className={`text-[10px] font-semibold px-2 py-1 rounded-md transition-all ${scheduleView === 'tomorrow' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'}`}>מחר</button>
+                      <button onClick={() => setScheduleView('weekly')} className={`text-[10px] font-semibold px-2 py-1 rounded-md transition-all ${scheduleView === 'weekly' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'}`}>שבועי</button>
+                    </div>
+                  }
+                >
+                  {scheduleView === 'today' && (
+                    <div className="space-y-0">
+                      {schedule.map((item, idx) => {
+                        const hasSummary = !!sessionSummaries[item.id];
+                        return (
                           <div
                             key={item.id}
-                            onClick={() => toggleScheduleItem(item.id)}
-                            className={`flex gap-3 items-center text-sm py-2.5 px-2 rounded-xl cursor-pointer transition-all ${
-                              item.completed ? 'bg-blue-50' : 'hover:bg-gray-50'
-                            }`}
+                            onClick={hasSummary ? () => setViewingSessionSummary(item.id) : undefined}
+                            className={`flex gap-3 items-start ${hasSummary ? 'cursor-pointer' : ''}`}
                           >
-                            <div className={`w-6 h-6 rounded-lg flex items-center justify-center transition-colors shrink-0 ${
-                              item.completed ? 'bg-blue-600 text-white' : 'border-2 border-gray-200'
-                            }`}>
-                              {item.completed && <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>}
+                            <span className="font-bold text-gray-500 w-10 text-xs pt-0.5 shrink-0">{item.time}</span>
+                            <div className="flex flex-col items-center self-stretch">
+                              <div className={`w-3 h-3 rounded-full border-2 mt-1 shrink-0 ${item.completed ? 'bg-blue-600 border-blue-600' : 'bg-white border-blue-300'}`} />
+                              {idx < schedule.length - 1 && <div className="w-0.5 flex-1 bg-gray-200 min-h-[20px]" />}
                             </div>
-                            <span className="font-semibold text-gray-400 w-10 text-xs">{item.time}</span>
-                            <p className={`font-medium truncate flex-1 text-sm ${item.completed ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{item.title}</p>
+                            <div className="flex-1 pb-3">
+                              <div className="flex items-center gap-2">
+                                <span className="text-base">{typeIcons[item.type]}</span>
+                                <p className={`font-medium text-sm ${item.completed ? 'text-gray-400' : 'text-gray-900'}`}>{item.title}</p>
+                              </div>
+                              {hasSummary && <span className="text-xs text-blue-600 font-semibold">צפייה בסיכום המפגש ›</span>}
+                            </div>
                           </div>
-                        ))}
-                      </div>
-                    )}
-                    {scheduleView === 'tomorrow' && (
+                        );
+                      })}
+                    </div>
+                  )}
+                  {scheduleView === 'tomorrow' && (
                       <div className="space-y-1.5">
                         {MOCK_TOMORROW_SCHEDULE.map((item) => (
                           <div key={item.id} className="flex gap-3 items-center text-sm py-2.5 px-2 rounded-xl">
@@ -725,70 +881,129 @@ const App: React.FC = () => {
                         ))}
                       </div>
                     )}
-                  </WidgetCard>
+                </WidgetCard>
+              </div>
+            )}
 
-                  <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                    <button
-                      onClick={() => setShowStageInfo(v => !v)}
-                      className="w-full px-4 py-3 flex items-center justify-between"
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <span className="text-blue-500">💡</span>
-                        <span className="font-semibold text-gray-800 text-sm">מידע שיכול לעזור לי בשלב זה</span>
+            {/* ===== Zone B: what's in my hands (in my control) ===== */}
+            {!isPreAdmissionStage && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 px-1">
+                  <span className="text-base">✅</span>
+                  <h3 className="text-sm font-bold text-gray-500">מה בידיים שלי</h3>
+                </div>
+
+                {/* Release-approval status (pre-home only) */}
+                {isPreHomeStage && (
+                  <div className="p-3 bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-col items-center justify-center text-center gap-2">
+                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-widest">סטטוס אישור יציאה</span>
+                    {isReleaseApproved ? (
+                      <div className="flex items-center gap-2 bg-green-50 text-green-700 px-3 py-1.5 rounded-2xl border border-green-100">
+                        <span className="text-base">✅</span>
+                        <span className="font-semibold text-sm">התקבל אישור יציאה הביתה</span>
                       </div>
-                      <span className={`text-gray-400 text-xs transition-transform duration-200 ${showStageInfo ? 'rotate-180' : ''}`}>▼</span>
-                    </button>
-                    {showStageInfo && (
-                      <div className="border-t border-gray-50">
-                        <div className={`grid ${homeIcons.length <= 4 ? 'grid-cols-4' : 'grid-cols-5'} gap-1.5 px-4 pt-3 pb-3`}>
-                          {homeIcons.map(topic => (
-                            <button
-                              key={topic.label}
-                              onClick={() => {
-                                if (topic.view === 'service-basket' && currentStage === AppStage.ACCLIMATIZATION && !joinedSocialActivity) {
-                                  setShowSocialActivityPopup(true);
-                                  return;
-                                }
-                                if ((topic as any).action) {
-                                  (topic as any).action();
-                                } else if (topic.view === 'faq') {
-                                  setActiveTab('faq');
-                                } else {
-                                  setActiveTab('info');
-                                  setInfoSubView(topic.view as InfoSubView);
-                                }
-                              }}
-                              className="flex flex-col items-center gap-1.5 transition-all active:scale-90 group"
-                            >
-                              <div className="w-11 h-11 rounded-2xl bg-blue-50 flex items-center justify-center text-xl shadow-sm border border-blue-100/30 group-hover:bg-blue-100 transition-colors">
-                                {topic.icon}
-                              </div>
-                              <span className="text-[10px] font-medium text-gray-600 text-center leading-tight h-5 flex items-center overflow-hidden px-1">
-                                {topic.label}
-                              </span>
-                            </button>
-                          ))}
+                    ) : (
+                      <div className="flex flex-col items-center gap-1">
+                        <div className="flex items-center gap-2 bg-red-50 text-red-600 px-3 py-1.5 rounded-2xl border border-red-100 animate-pulse">
+                          <span className="text-base">⏳</span>
+                          <span className="font-semibold text-sm">טרם התקבל אישור יציאה הביתה</span>
                         </div>
-                        {STAGE_INFO[currentStage] && (
-                          <div className="px-4 pb-4 space-y-2.5 border-t border-gray-50 pt-3">
-                            {STAGE_INFO[currentStage].map((item, i) => (
-                              <div key={i} className="flex items-start gap-2.5 text-sm text-gray-700">
-                                <span className="text-blue-400 mt-0.5 shrink-0 font-bold">•</span>
-                                <p className="leading-relaxed">{item}</p>
-                              </div>
-                            ))}
-                          </div>
-                        )}
+                        <p className="text-xs text-gray-400 mt-1">האישור יתקבל לאחר סיום כל התדרוכים הנדרשים בצ'קליסט.</p>
                       </div>
                     )}
                   </div>
-                </>
-              )}
-            </div>
+                )}
+
+                {/* My tasks — checklist */}
+                {currentChecklist.length > 0 && (
+                  <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-sm font-semibold text-gray-800">{tasksTitle}</h4>
+                      <span className="text-xs font-bold text-gray-400">{completedChecklistCount}/{totalChecklistCount}</span>
+                    </div>
+                    <div className="w-full bg-gray-100 h-2.5 rounded-full overflow-hidden">
+                      <div className="h-full bg-blue-600 transition-all duration-700" style={{ width: `${completionPercentage}%` }} />
+                    </div>
+                    <button onClick={() => setActiveTab('checklist')} className="text-blue-600 text-xs font-semibold block text-right">צפייה בכל המשימות ({completionPercentage}%)</button>
+                  </div>
+                )}
+
+                {/* Personal exercises shortcut */}
+                <button
+                  onClick={() => { setGeTab('exercises'); setActiveTab('goals-exercises'); }}
+                  className="w-full bg-white rounded-2xl border border-gray-100 shadow-sm p-3 flex items-center gap-3 text-right hover:bg-blue-50/40 transition-colors"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-xl shrink-0">🏋️</div>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-gray-900">התרגילים שלי להיום</p>
+                    <p className="text-xs text-gray-500">כניסה לתרגולים האישיים שלך</p>
+                  </div>
+                  <span className="text-gray-300 text-lg">‹</span>
+                </button>
+              </div>
+            )}
+
+            {/* Stage info (collapsible) */}
+            {!isPreAdmissionStage && (
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                <button
+                  onClick={() => setShowStageInfo(v => !v)}
+                  className="w-full px-4 py-3 flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-blue-500">💡</span>
+                    <span className="font-semibold text-gray-800 text-sm">מידע שיכול לעזור לי בשלב זה</span>
+                  </div>
+                  <span className={`text-gray-400 text-xs transition-transform duration-200 ${showStageInfo ? 'rotate-180' : ''}`}>▼</span>
+                </button>
+                {showStageInfo && (
+                  <div className="border-t border-gray-50">
+                    <div className={`grid ${homeIcons.length <= 4 ? 'grid-cols-4' : 'grid-cols-5'} gap-1.5 px-4 pt-3 pb-3`}>
+                      {homeIcons.map(topic => (
+                        <button
+                          key={topic.label}
+                          onClick={() => {
+                            if (topic.view === 'service-basket' && currentStage === AppStage.ACCLIMATIZATION && !joinedSocialActivity) {
+                              setShowSocialActivityPopup(true);
+                              return;
+                            }
+                            if ((topic as any).action) {
+                              (topic as any).action();
+                            } else {
+                              openInfoView(topic.view as InfoSubView);
+                            }
+                          }}
+                          className="flex flex-col items-center gap-1.5 transition-all active:scale-90 group"
+                        >
+                          <div className="w-11 h-11 rounded-2xl bg-blue-50 flex items-center justify-center text-xl shadow-sm border border-blue-100/30 group-hover:bg-blue-100 transition-colors">
+                            {topic.icon}
+                          </div>
+                          <span className="text-[10px] font-medium text-gray-600 text-center leading-tight h-5 flex items-center overflow-hidden px-1">
+                            {topic.label}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                    {STAGE_INFO[currentStage] && (
+                      <div className="px-4 pb-4 space-y-2.5 border-t border-gray-50 pt-3">
+                        {STAGE_INFO[currentStage].map((item, i) => (
+                          <div key={i} className="flex items-start gap-2.5 text-sm text-gray-700">
+                            <span className="text-blue-400 mt-0.5 shrink-0 font-bold">•</span>
+                            <p className="leading-relaxed">{item}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         );
 
-      case 'info':
+      case 'assistant':
+      case 'hospital':
+      case 'difficulties': {
         const sendChatMessage = (text: string) => {
           if (!text.trim()) return;
           setChatMessages(prev => [
@@ -799,26 +1014,119 @@ const App: React.FC = () => {
           setChatInput('');
         };
 
+        const landingKey: InfoSubView = activeTab === 'hospital' ? 'hospital-home' : activeTab === 'difficulties' ? 'diff-home' : 'grid';
+        const areaTitle = activeTab === 'hospital' ? 'בית החולים' : activeTab === 'difficulties' ? 'קשיים נפוצים' : 'העוזר האישי שלי';
+        const isLanding = infoSubView === 'grid' || infoSubView === 'hospital-home' || infoSubView === 'diff-home';
+
+        const HOSPITAL_ITEMS = [
+          { label: 'סל השירותים', icon: '🎁', view: 'service-basket' as InfoSubView },
+          { label: 'מפת בית החולים', icon: '📍', view: 'about-reut' as InfoSubView },
+          { label: 'צוות המחלקה', icon: '🧑‍⚕️', view: 'team' as InfoSubView },
+          { label: 'למי עליי לפנות?', icon: '💬', view: 'who-to-contact' as InfoSubView },
+          { label: 'היכרות עם מטופלים', icon: '👥', view: 'meeting-patients' as InfoSubView },
+          { label: 'המחלקה שלי', icon: '🏥', view: 'ward' as InfoSubView },
+          { label: 'חוזה טיפולי', icon: '📜', view: 'therapeutic-contract' as InfoSubView },
+          { label: 'פניות ציבור', icon: '📩', view: 'public-enquiries' as InfoSubView },
+        ];
+        const DIFF_ITEMS = [
+          { label: 'כאב', icon: '🤕', view: 'pain' as InfoSubView },
+          { label: 'עייפות', icon: '😴', view: 'fatigue' as InfoSubView },
+          { label: 'עצירות', icon: '🚽', view: 'constipation' as InfoSubView },
+          { label: 'זוגיות ומיניות', icon: '❤️', view: 'sexuality' as InfoSubView },
+          { label: 'חרדה', icon: '🧘', view: 'anxiety' as InfoSubView },
+        ];
+
         return (
           <div className="text-right" dir="rtl">
-            {infoSubView !== 'grid' && (
+            {!isLanding && (
               <div className="flex items-center justify-between mb-3">
                 <button onClick={() => {
-                    if (infoSubView === 'home-prep-hub' || infoSubView === 'service-basket') {
-                        setInfoSubView('grid');
-                    } else if (['prep-video', 'prep-tips', 'prep-continuum', 'prep-social', 'prep-rights', 'prep-sexuality', 'prep-date-info'].includes(infoSubView)) {
+                    if (['prep-video', 'prep-tips', 'prep-continuum', 'prep-social', 'prep-rights', 'prep-sexuality', 'prep-date-info'].includes(infoSubView)) {
                         setInfoSubView('home-prep-hub');
                     } else if (['sb-physio-equip', 'sb-yoga', 'sb-comp-med', 'sb-equip-rent', 'sb-security', 'sb-stay-permit', 'sb-research', 'sb-xray', 'sb-tv'].includes(infoSubView)) {
                         setInfoSubView('service-basket');
                     } else {
-                        setInfoSubView('grid');
+                        setInfoSubView(landingKey);
                     }
                 }} className="text-blue-600 font-semibold text-sm">חזרה</button>
-                <h2 className="text-base font-bold text-gray-900">העוזר האישי שלי</h2>
+                <h2 className="text-base font-bold text-gray-900">{areaTitle}</h2>
               </div>
             )}
 
-            {infoSubView === 'grid' ? (
+            {infoSubView === 'hospital-home' ? (
+              <div className="space-y-4 animate-in fade-in duration-300">
+                <h2 className="text-lg font-bold text-blue-600">בית החולים</h2>
+                <div className="relative">
+                  <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none">
+                    <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                  </div>
+                  <input
+                    type="text"
+                    value={landingSearch}
+                    onChange={e => setLandingSearch(e.target.value)}
+                    placeholder="חיפוש נושא..."
+                    className="w-full p-3 pr-10 border border-gray-100 rounded-2xl bg-white shadow-sm focus:ring-2 focus:ring-blue-500 outline-none font-medium text-gray-700 text-sm text-right"
+                  />
+                </div>
+                {(() => {
+                  const filtered = HOSPITAL_ITEMS.filter(item => item.label.includes(landingSearch.trim()));
+                  return filtered.length === 0 ? (
+                    <p className="text-gray-400 text-sm text-center py-8">לא נמצאו תוצאות.</p>
+                  ) : (
+                    <div className="grid grid-cols-3 gap-2.5">
+                      {filtered.map(item => (
+                        <button
+                          key={item.view}
+                          onClick={() => setInfoSubView(item.view)}
+                          className="p-2 h-24 rounded-2xl border border-gray-100 bg-white shadow-sm flex flex-col items-center justify-center hover:bg-blue-50 transition-all active:scale-95"
+                        >
+                          <span className="text-2xl mb-1">{item.icon}</span>
+                          <span className="text-xs font-medium text-gray-700 text-center leading-tight px-1">{item.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </div>
+            ) : infoSubView === 'diff-home' ? (
+              <div className="space-y-4 animate-in fade-in duration-300">
+                <div className="space-y-1">
+                  <h2 className="text-lg font-bold text-blue-600">קשיים נפוצים</h2>
+                  <p className="text-sm text-gray-500 font-medium">בחר נושא כדי לקבל מידע, טיפים ותשובות לשאלות נפוצות.</p>
+                </div>
+                <div className="relative">
+                  <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none">
+                    <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                  </div>
+                  <input
+                    type="text"
+                    value={landingSearch}
+                    onChange={e => setLandingSearch(e.target.value)}
+                    placeholder="חיפוש קושי..."
+                    className="w-full p-3 pr-10 border border-gray-100 rounded-2xl bg-white shadow-sm focus:ring-2 focus:ring-blue-500 outline-none font-medium text-gray-700 text-sm text-right"
+                  />
+                </div>
+                {(() => {
+                  const filtered = DIFF_ITEMS.filter(item => item.label.includes(landingSearch.trim()));
+                  return filtered.length === 0 ? (
+                    <p className="text-gray-400 text-sm text-center py-8">לא נמצאו תוצאות.</p>
+                  ) : (
+                    <div className="grid grid-cols-3 gap-2.5">
+                      {filtered.map(item => (
+                        <button
+                          key={item.view}
+                          onClick={() => setInfoSubView(item.view)}
+                          className="p-2 h-24 rounded-2xl border border-gray-100 bg-white shadow-sm flex flex-col items-center justify-center hover:bg-blue-50 transition-all active:scale-95"
+                        >
+                          <span className="text-2xl mb-1">{item.icon}</span>
+                          <span className="text-xs font-medium text-gray-700 text-center leading-tight px-1">{item.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </div>
+            ) : infoSubView === 'grid' ? (
               <div className="flex flex-col gap-3 pb-2">
 
                 {/* Chat header */}
@@ -1165,7 +1473,9 @@ const App: React.FC = () => {
                         <p className="text-gray-500 font-medium text-sm">התוכן לעמוד זה יעודכן בקרוב.</p>
                     </div>
                 </div>
-            ) : ['sleep', 'pain', 'stress', 'sexuality', 'social-rights'].includes(infoSubView) ? (
+            ) : ['pain', 'fatigue', 'sexuality', 'anxiety'].includes(infoSubView) ? (
+                renderDifficultyPage(infoSubView)
+            ) : ['sleep', 'stress', 'social-rights'].includes(infoSubView) ? (
                 <div className="space-y-4 animate-in slide-in-from-left-4 duration-300 text-right" dir="rtl">
                     <h2 className="text-lg font-bold text-blue-600 mb-4">
                         {infoTopics.find(t => t.view === infoSubView)?.label}
@@ -1300,6 +1610,7 @@ const App: React.FC = () => {
             )}
           </div>
         );
+      }
 
       case 'faq':
         const faqItems = MOCK_FAQ[currentStage] || [];
@@ -1337,19 +1648,7 @@ const App: React.FC = () => {
             {faqItems.length === 0 ? (
               <p className="text-gray-400 text-sm text-center py-10">אין שאלות נפוצות לשלב זה.</p>
             ) : (
-              <div className="space-y-3">
-                {faqItems.map((faq, index) => (
-                  <details key={faq.id} className="group bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden transition-all duration-300">
-                    <summary className="p-3 font-medium text-sm text-gray-800 cursor-pointer flex items-center justify-between list-none [&::-webkit-details-marker]:hidden">
-                      <span className="text-right flex-1">{faq.question}</span>
-                      <svg className="w-4 h-4 text-blue-500 transform group-open:rotate-180 transition-transform shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
-                    </summary>
-                    <div className="p-3 pt-0 text-sm text-gray-600 leading-relaxed border-t border-gray-50">
-                      {faq.answer}
-                    </div>
-                  </details>
-                ))}
-              </div>
+              renderFaq(faqItems, 'שאלות נפוצות לשלב זה')
             )}
 
             {/* Bottom Button */}
@@ -1361,47 +1660,6 @@ const App: React.FC = () => {
         );
 
       case 'checklist':
-        if (currentStage === AppStage.REHAB_ROUTINE) {
-          const scheduleCompleted = schedule.filter(i => i.completed).length;
-          const scheduleTotal = schedule.length;
-          const scheduleProgress = scheduleTotal > 0 ? Math.round((scheduleCompleted / scheduleTotal) * 100) : 0;
-          return (
-            <div className="space-y-3 pb-4 text-right animate-in fade-in duration-300">
-              {renderBackButton()}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-base font-bold text-gray-900">לו״ז יומי</h3>
-                  <span className="text-xs font-bold text-gray-500">{scheduleCompleted} מתוך {scheduleTotal}</span>
-                </div>
-                <div className="w-full bg-gray-100 h-2.5 rounded-full overflow-hidden">
-                  <div className="h-full bg-blue-600 rounded-full transition-all duration-500" style={{ width: `${scheduleProgress}%` }} />
-                </div>
-                <div className="space-y-2">
-                  {schedule.map(item => (
-                    <div
-                      key={item.id}
-                      onClick={() => toggleScheduleItem(item.id)}
-                      className={`p-4 rounded-2xl border transition-all cursor-pointer flex items-center gap-4 ${
-                        item.completed ? 'bg-blue-50 border-blue-100' : 'bg-white border-gray-100 hover:border-blue-200'
-                      }`}
-                    >
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors shrink-0 ${
-                        item.completed ? 'bg-blue-600 text-white' : 'border-2 border-gray-200'
-                      }`}>
-                        {item.completed && <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>}
-                      </div>
-                      <span className="font-semibold text-gray-400 text-xs w-10">{item.time}</span>
-                      <span className={`font-bold text-xs flex-1 text-right ${item.completed ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
-                        {item.title}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          );
-        }
-
         if (currentStage === AppStage.PRE_HOME) {
           const preHomeChecklist = checklist[AppStage.PRE_HOME] || [];
 
@@ -1444,174 +1702,240 @@ const App: React.FC = () => {
           </div>
         );
 
-      case 'personal':
+      case 'medical':
         return (
-          <div className="space-y-3 pb-4 text-right animate-in fade-in duration-300">
+          <div className="space-y-3 pb-4 text-right animate-in fade-in duration-300" dir="rtl">
             {renderBackButton()}
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold text-gray-900">אזור שיקומי אישי</h2>
+            <h2 className="text-lg font-bold text-gray-900">מידע ותיק רפואי</h2>
+
+            {/* Functional restrictions — high prominence banner */}
+            <div className="bg-red-50 rounded-2xl p-4 border-2 border-red-300 shadow-sm">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-2xl">⚠️</span>
+                <h3 className="font-bold text-base text-red-700">איסורים ומגבלות תפקודיות</h3>
+              </div>
+              <div className="bg-white rounded-xl p-4 border border-red-200 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">🚫</span>
+                  <span className="font-bold text-gray-900 text-base">איסור דריכה על רגל ימין</span>
+                </div>
+                <span className="text-xs font-bold text-white bg-red-500 px-3 py-1 rounded-full shrink-0">תפקודי</span>
+              </div>
+              <p className="text-xs text-red-600 font-medium mt-2">חשוב להקפיד על ההגבלות עד לעדכון הצוות הרפואי.</p>
             </div>
 
-            {/* Internal tab toggle */}
-            <div className="bg-gray-100 p-1 rounded-2xl flex gap-1">
-              <button
-                onClick={() => setPersonalSubTab('medical')}
-                className={`flex-1 py-2 rounded-xl text-sm font-semibold transition-all ${personalSubTab === 'medical' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'}`}
-              >
-                🩺 מידע רפואי
-              </button>
-              <button
-                onClick={() => setPersonalSubTab('goals')}
-                className={`flex-1 py-2 rounded-xl text-sm font-semibold transition-all ${personalSubTab === 'goals' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'}`}
-              >
-                🎯 יעדים אישיים
-              </button>
+            {/* Medications */}
+            <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm space-y-4">
+              <div className="flex items-center gap-2 text-blue-600">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" /></svg>
+                <h3 className="font-semibold text-base text-gray-800">רשימת התרופות שלי</h3>
+              </div>
+              <div className="space-y-3">
+                {[
+                  { name: 'אקמול', dose: '500 מ"ג • לפי הצורך', time: 'בוקר/צהריים/ערב' },
+                  { name: 'אספירין', dose: '100 מ"ג • פעם ביום', time: 'בוקר' }
+                ].map((med, idx) => (
+                  <div key={idx} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between">
+                    <div className="text-right">
+                      <h4 className="font-semibold text-gray-900">{med.name}</h4>
+                      <span className="text-xs text-gray-500 font-bold">{med.dose}</span>
+                    </div>
+                    <span className="bg-blue-50 text-blue-600 text-xs font-bold px-3 py-1.5 rounded-lg">{med.time}</span>
+                  </div>
+                ))}
+              </div>
             </div>
 
-            {personalSubTab === 'medical' && (
-              <div className="space-y-3 animate-in fade-in duration-200">
-                {/* Limitations Section */}
-                <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm space-y-4">
-                  <div className="flex items-center gap-2 text-blue-600">
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-                    <h3 className="font-semibold text-base text-gray-800">הגבלות רפואיות ותפקודיות</h3>
-                  </div>
-                  <div className="bg-red-50 rounded-2xl p-4 border border-red-100 flex items-center">
-                    <div className="flex flex-col items-start w-full">
-                      <div className="flex items-center gap-2 self-start">
-                        <span className="text-xl">⚠️</span>
-                        <span className="font-semibold text-gray-900">איסור דריכה על רגל ימין</span>
-                      </div>
-                      <span className="text-xs font-semibold text-red-500 mt-1 self-start">תפקודי</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Medications Section */}
-                <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm space-y-4">
-                  <div className="flex items-center gap-2 text-blue-600">
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" /></svg>
-                    <h3 className="font-semibold text-base text-gray-800">רשימת התרופות שלי</h3>
-                  </div>
-                  <div className="space-y-3">
-                    {[
-                      { name: 'אקמול', dose: '500 מ"ג • לפי הצורך', time: 'בוקר/צהריים/ערב' },
-                      { name: 'אספירין', dose: '100 מ"ג • פעם ביום', time: 'בוקר' }
-                    ].map((med, idx) => (
-                      <div key={idx} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between">
-                        <div className="text-right">
-                          <h4 className="font-semibold text-gray-900">{med.name}</h4>
-                          <span className="text-xs text-gray-500 font-bold">{med.dose}</span>
-                        </div>
-                        <span className="bg-blue-50 text-blue-600 text-xs font-bold px-3 py-1.5 rounded-lg">{med.time}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Treatment Summaries Section */}
-                <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm space-y-4">
-                  <div className="flex items-center gap-2 text-blue-600">
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                    <h3 className="font-semibold text-base text-gray-800">סיכומי טיפול</h3>
-                  </div>
-                  <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between active:scale-95 transition-transform cursor-pointer">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-gray-50 rounded-xl flex items-center justify-center">
-                        <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                      </div>
-                      <div className="text-right">
-                        <h4 className="font-semibold text-gray-900 text-sm">סיכום ביניים - פיזיותרפיה</h4>
-                        <span className="text-xs text-gray-400 font-bold">18.05.2024 • ד"ר כהן</span>
-                      </div>
-                    </div>
-                    <svg className="w-5 h-5 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" /></svg>
-                  </div>
-                </div>
+            {/* Treatment summaries — with working view button */}
+            <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm space-y-4">
+              <div className="flex items-center gap-2 text-blue-600">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                <h3 className="font-semibold text-base text-gray-800">סיכומי טיפול</h3>
               </div>
-            )}
-
-            {personalSubTab === 'goals' && (
-              <div className="space-y-3 animate-in fade-in duration-200">
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2 text-green-600">
-                    <span className="text-2xl">👕</span>
-                    <h3 className="font-semibold text-base">ריפוי בעיסוק</h3>
+              <div
+                onClick={() => setViewingSessionSummary('s2')}
+                className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between active:scale-95 transition-transform cursor-pointer hover:bg-blue-50"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-gray-50 rounded-xl flex items-center justify-center">
+                    <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                   </div>
-                  <div className="space-y-2">
-                    {[
-                      { id: 'g1', text: 'לבישת חולצה באופן עצמאי', completed: false },
-                      { id: 'g2', text: 'שימוש במקלדת למשך 15 דקות', completed: false }
-                    ].map(goal => (
-                      <div key={goal.id} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-3">
-                        <div className="w-6 h-6 rounded-md border-2 border-gray-200 flex items-center justify-center shrink-0">
-                          {goal.completed && <span className="text-blue-600 font-bold">✓</span>}
-                        </div>
-                        <span className="font-medium text-gray-700 text-sm">{goal.text}</span>
-                      </div>
-                    ))}
+                  <div className="text-right">
+                    <h4 className="font-semibold text-gray-900 text-sm">סיכום מפגש - פיזיותרפיה</h4>
+                    <span className="text-xs text-gray-400 font-bold">26.1.2026 • מיכל לוין</span>
                   </div>
                 </div>
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2 text-purple-700">
-                    <span className="text-2xl">🗣️</span>
-                    <h3 className="font-semibold text-base">קלינאות תקשורת</h3>
-                  </div>
-                  <div className="space-y-2">
-                    {[
-                      { id: 'g3', text: 'בליעה בטוחה של נוזלים', completed: false },
-                      { id: 'g4', text: 'דיבור ברור בשיחת טלפון', completed: false }
-                    ].map(goal => (
-                      <div key={goal.id} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-3">
-                        <div className="w-6 h-6 rounded-md border-2 border-gray-200 flex items-center justify-center shrink-0">
-                          {goal.completed && <span className="text-blue-600 font-bold">✓</span>}
-                        </div>
-                        <span className="font-medium text-gray-700 text-sm">{goal.text}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div className="space-y-3 pt-4 border-t border-gray-100">
-                  <div className="flex items-center gap-2 text-blue-600">
-                    <div className="w-6 h-6 bg-green-500 rounded-md flex items-center justify-center text-white text-xs">✓</div>
-                    <h3 className="font-semibold text-base text-blue-600">יעדים שהושגו</h3>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-3 opacity-75">
-                      <div className="w-6 h-6 rounded-md border-2 border-blue-500 bg-blue-500 text-white flex items-center justify-center shrink-0">✓</div>
-                      <span className="font-bold text-gray-500 text-sm line-through">אכילה ללא עזרה</span>
-                    </div>
-                  </div>
-                </div>
+                <svg className="w-5 h-5 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" /></svg>
               </div>
-            )}
+              <button
+                onClick={() => setViewingSessionSummary('s2')}
+                className="w-full py-3 bg-blue-600 text-white rounded-2xl font-semibold text-sm shadow-md shadow-blue-200 active:scale-95 transition-all flex items-center justify-center gap-2"
+              >
+                <span>📄</span>
+                <span>לצפייה בסיכומי טיפול</span>
+              </button>
+            </div>
           </div>
         );
 
-      case 'notebook':
-        return (
-          <div className="space-y-3 pb-4 text-right animate-in fade-in duration-300">
-            {renderBackButton()}
-            
-            {/* Header */}
-            <div className="flex items-center justify-between">
-               <h2 className="text-lg font-bold text-gray-900">המחברת שלי</h2>
-               <button 
-                 onClick={() => {
-                   setActiveNote({ title: '', content: '' });
-                   setIsEditingNote(true);
-                 }}
-                 className="bg-blue-600 text-white px-4 py-2 rounded-xl font-semibold text-sm shadow-md active:scale-95 transition-all flex items-center gap-2"
-               >
-                 <span>+ פתק חדש</span>
-               </button>
-            </div>
-            
-            <p className="text-gray-500 text-sm font-medium">נקודות שחשוב לי לזכור, מחשבות ושאלות לצוות</p>
+      case 'goals-exercises': {
+        const visibleExercises = exerciseFilter === 'today' ? exercisesList.filter(e => e.forToday) : exercisesList;
+        const physioExercises = visibleExercises.filter(e => e.category === 'פיזיותרפיה');
+        const otExercises = visibleExercises.filter(e => e.category === 'ריפוי בעיסוק');
+        const activeGoals = goalsList.filter(g => !g.completed);
+        const achievedGoals = goalsList.filter(g => g.completed);
+        const goalDisciplines = Array.from(new Set(activeGoals.map(g => g.discipline)));
 
-            {/* Notes List */}
-            <div className="space-y-3">
-               {notes.map(note => (
+        const renderExerciseCard = (ex: typeof exercisesList[number]) => (
+          <div key={ex.id} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-3">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => toggleExercise(ex.id)}
+                className={`w-8 h-8 rounded-xl border-2 flex items-center justify-center transition-all shrink-0 ${ex.completed ? 'bg-blue-600 border-blue-600' : 'border-gray-200 bg-white'}`}
+              >
+                {ex.completed && <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>}
+              </button>
+              <div className="w-12 h-12 bg-gray-50 rounded-2xl flex items-center justify-center text-2xl shrink-0">{ex.icon}</div>
+              <div className="text-right flex-1">
+                <h4 className={`font-semibold text-gray-900 ${ex.completed ? 'line-through text-gray-400' : ''}`}>{ex.title}</h4>
+                <span className={`text-xs font-medium px-2 py-0.5 rounded-md ${ex.type === 'wisecare' ? 'bg-blue-50 text-blue-600' : 'bg-gray-100 text-gray-500'}`}>
+                  {ex.type === 'wisecare' ? 'קישור ל-WiseCare' : 'דף תרגול'}
+                </span>
+              </div>
+            </div>
+            <button className="w-full py-2.5 bg-blue-600 text-white rounded-xl font-semibold text-sm shadow-sm active:scale-95 transition-all flex items-center justify-center gap-2 hover:bg-blue-700">
+              <span>{ex.type === 'wisecare' ? '🔗' : '▶'}</span>
+              <span>{ex.type === 'wisecare' ? 'פתיחה ב-WiseCare' : 'לצפיה בתרגיל'}</span>
+            </button>
+          </div>
+        );
+
+        return (
+          <div className="space-y-3 pb-4 text-right animate-in fade-in duration-300" dir="rtl">
+            {renderBackButton()}
+            <h2 className="text-lg font-bold text-gray-900">יעדים ותרגילים</h2>
+
+            {/* Internal sub-tabs */}
+            <div className="bg-gray-100 p-1 rounded-2xl flex gap-1">
+              {([
+                { id: 'exercises', label: '🏋️ תרגילים' },
+                { id: 'goals', label: '🎯 יעדים' },
+                { id: 'notebook', label: '📝 המחברת שלי' },
+              ] as const).map(t => (
+                <button
+                  key={t.id}
+                  onClick={() => setGeTab(t.id)}
+                  className={`flex-1 py-2 rounded-xl text-xs font-semibold transition-all ${geTab === t.id ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'}`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Exercises sub-view */}
+            {geTab === 'exercises' && (
+              <div className="space-y-3 animate-in fade-in duration-200">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-base font-bold text-gray-900">התרגילים שלי</h3>
+                  <button
+                    onClick={() => setExerciseFilter(f => f === 'today' ? 'all' : 'today')}
+                    className="bg-blue-50 text-blue-600 px-3 py-1.5 rounded-xl text-xs font-bold hover:bg-blue-100 transition-colors flex items-center gap-1.5"
+                  >
+                    <span>{exerciseFilter === 'today' ? '📅' : '📋'}</span>
+                    <span>{exerciseFilter === 'today' ? 'הצג הכל' : 'הצג להיום בלבד'}</span>
+                  </button>
+                </div>
+                {visibleExercises.length === 0 ? (
+                  <p className="text-gray-400 text-sm text-center py-8">אין תרגילים להצגה.</p>
+                ) : (
+                  <>
+                    {physioExercises.length > 0 && (
+                      <div className="space-y-3">
+                        <h3 className="font-bold text-gray-400 text-sm px-1">פיזיותרפיה</h3>
+                        {physioExercises.map(renderExerciseCard)}
+                      </div>
+                    )}
+                    {otExercises.length > 0 && (
+                      <div className="space-y-3">
+                        <h3 className="font-bold text-gray-400 text-sm px-1">ריפוי בעיסוק</h3>
+                        {otExercises.map(renderExerciseCard)}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Goals sub-view */}
+            {geTab === 'goals' && (
+              <div className="space-y-3 animate-in fade-in duration-200">
+                {goalDisciplines.map(discipline => {
+                  const items = activeGoals.filter(g => g.discipline === discipline);
+                  return (
+                    <div key={discipline} className="space-y-2">
+                      <div className="flex items-center gap-2 text-gray-700">
+                        <span className="text-2xl">{items[0]?.icon}</span>
+                        <h3 className="font-semibold text-base">{discipline}</h3>
+                      </div>
+                      {items.map(goal => (
+                        <div
+                          key={goal.id}
+                          onClick={() => toggleGoal(goal.id)}
+                          className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-3 cursor-pointer hover:border-blue-200 active:scale-95 transition-all"
+                        >
+                          <div className="w-6 h-6 rounded-md border-2 border-gray-200 flex items-center justify-center shrink-0">
+                            {goal.completed && <span className="text-blue-600 font-bold">✓</span>}
+                          </div>
+                          <span className="font-medium text-gray-700 text-sm">{goal.text}</span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
+
+                <div className="space-y-3 pt-4 border-t border-gray-100">
+                  <div className="flex items-center gap-2 text-blue-600">
+                    <div className="w-6 h-6 bg-green-500 rounded-md flex items-center justify-center text-white text-xs">✓</div>
+                    <h3 className="font-semibold text-base text-blue-600">יעדים שהשגתי</h3>
+                  </div>
+                  {achievedGoals.length === 0 ? (
+                    <p className="text-gray-400 text-xs px-1">עדיין לא סימנת יעדים שהושגו — בהצלחה! 💪</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {achievedGoals.map(goal => (
+                        <div
+                          key={goal.id}
+                          onClick={() => toggleGoal(goal.id)}
+                          className="bg-gray-50 p-4 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-3 opacity-80 cursor-pointer active:scale-95 transition-all"
+                        >
+                          <div className="w-6 h-6 rounded-md border-2 border-blue-500 bg-blue-500 text-white flex items-center justify-center shrink-0">✓</div>
+                          <span className="font-bold text-gray-500 text-sm line-through">{goal.text}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Notebook sub-view */}
+            {geTab === 'notebook' && (
+              <div className="space-y-3 animate-in fade-in duration-200">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-base font-bold text-gray-900">המחברת שלי</h3>
+                  <button
+                    onClick={() => {
+                      setActiveNote({ title: '', content: '' });
+                      setIsEditingNote(true);
+                    }}
+                    className="bg-blue-600 text-white px-4 py-2 rounded-xl font-semibold text-sm shadow-md active:scale-95 transition-all flex items-center gap-2"
+                  >
+                    <span>+ פתק חדש</span>
+                  </button>
+                </div>
+                <p className="text-gray-500 text-sm font-medium">נקודות שחשוב לי לזכור, מחשבות ושאלות לצוות</p>
+                <div className="space-y-3">
+                  {notes.map(note => (
                  <div 
                    key={note.id} 
                    onClick={() => {
@@ -1785,102 +2109,11 @@ const App: React.FC = () => {
                  </div>
               </div>
             )}
+              </div>
+            )}
           </div>
         );
-
-      case 'exercises':
-        const physioExercises = exercisesList.filter(e => e.category === 'פיזיותרפיה');
-        const otExercises = exercisesList.filter(e => e.category === 'ריפוי בעיסוק');
-
-        return (
-          <div className="space-y-3 pb-4 text-right animate-in fade-in duration-300">
-            {renderBackButton()}
-            
-            <div className="flex items-center justify-between mb-2">
-               <h2 className="text-lg font-bold text-gray-900">התרגילים שלי</h2>
-               <div className="bg-gray-100 p-1 rounded-xl flex text-xs font-bold">
-                  <button 
-                    onClick={() => setExerciseFilter('all')}
-                    className={`px-3 py-1.5 rounded-lg transition-all ${exerciseFilter === 'all' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'}`}
-                  >
-                    הכל
-                  </button>
-                  <button 
-                    onClick={() => setExerciseFilter('today')}
-                    className={`px-3 py-1.5 rounded-lg transition-all ${exerciseFilter === 'today' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'}`}
-                  >
-                    להיום
-                  </button>
-               </div>
-            </div>
-
-            <div className="space-y-3">
-                {/* Physiotherapy */}
-                <div className="space-y-3">
-                    <h3 className="font-bold text-gray-400 text-sm px-1">פיזיותרפיה</h3>
-                    {physioExercises.map(ex => (
-                        <div key={ex.id} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between">
-                            <div className="flex items-center gap-4">
-                                <button 
-                                    onClick={() => toggleExercise(ex.id)}
-                                    className={`w-8 h-8 rounded-xl border-2 flex items-center justify-center transition-all ${ex.completed ? 'bg-blue-600 border-blue-600' : 'border-gray-200 bg-white'}`}
-                                >
-                                    {ex.completed && <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>}
-                                </button>
-                                <div className="w-12 h-12 bg-gray-50 rounded-2xl flex items-center justify-center text-2xl">
-                                    {ex.icon}
-                                </div>
-                                <div className="text-right">
-                                    <h4 className={`font-semibold text-gray-900 ${ex.completed ? 'line-through text-gray-400' : ''}`}>{ex.title}</h4>
-                                    <span className={`text-xs font-medium px-2 py-0.5 rounded-md ${ex.type === 'wisecare' ? 'bg-blue-50 text-blue-600' : 'bg-gray-100 text-gray-500'}`}>
-                                        {ex.type === 'wisecare' ? 'קישור ל-WiseCare' : 'דף תרגול'}
-                                    </span>
-                                </div>
-                            </div>
-                            
-                            <button className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${ex.completed ? 'bg-gray-100 text-gray-400' : 'bg-blue-600 text-white shadow-md hover:bg-blue-700'}`}>
-                                {ex.type === 'wisecare' ? (
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
-                                ) : (
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
-                                )}
-                            </button>
-                        </div>
-                    ))}
-                </div>
-
-                {/* Occupational Therapy */}
-                <div className="space-y-3">
-                    <h3 className="font-bold text-gray-400 text-sm px-1">ריפוי בעיסוק</h3>
-                    {otExercises.map(ex => (
-                        <div key={ex.id} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between">
-                            <div className="flex items-center gap-4">
-                                <button 
-                                    onClick={() => toggleExercise(ex.id)}
-                                    className={`w-8 h-8 rounded-xl border-2 flex items-center justify-center transition-all ${ex.completed ? 'bg-blue-600 border-blue-600' : 'border-gray-200 bg-white'}`}
-                                >
-                                    {ex.completed && <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>}
-                                </button>
-                                <div className="w-12 h-12 bg-gray-50 rounded-2xl flex items-center justify-center text-2xl">
-                                    {ex.icon}
-                                </div>
-                                <div className="text-right">
-                                    <h4 className={`font-semibold text-gray-900 ${ex.completed ? 'line-through text-gray-400' : ''}`}>{ex.title}</h4>
-                                    <span className="text-xs font-medium px-2 py-0.5 rounded-md bg-gray-100 text-gray-500">
-                                        דף תרגול
-                                    </span>
-                                </div>
-                            </div>
-                            
-                            <button className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${ex.completed ? 'bg-gray-100 text-gray-400' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
-                            </button>
-                        </div>
-                    ))}
-                </div>
-            </div>
-          </div>
-        );
+      }
 
       default:
         return (
@@ -1896,9 +2129,154 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-100 flex justify-center" dir="rtl">
     <div className="w-full max-w-lg bg-white flex flex-col h-screen overflow-hidden text-right relative">
+      {/* Top header */}
+      <header className="shrink-0 bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between z-30">
+        <button onClick={() => setSidebarOpen(true)} className="w-9 h-9 rounded-xl hover:bg-gray-100 flex items-center justify-center text-gray-600 transition-colors" aria-label="תפריט">
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" /></svg>
+        </button>
+        <div className="text-center leading-tight">
+          <p className="text-sm font-bold text-gray-900">ערב טוב ישראל 🌙</p>
+        </div>
+        <button
+          onClick={() => notificationsOpen ? setNotificationsOpen(false) : openNotifications()}
+          className="relative w-9 h-9 rounded-xl hover:bg-gray-100 flex items-center justify-center text-gray-600 transition-colors"
+          aria-label="עדכונים ותזכורות"
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
+          {unreadCount > 0 && (
+            <span className="absolute -top-0.5 -left-0.5 bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[16px] h-4 px-1 flex items-center justify-center border-2 border-white">{unreadCount}</span>
+          )}
+        </button>
+      </header>
+
       <main className="flex-1 px-5 pt-4 pb-24 overflow-y-auto w-full text-right">
         {renderContent()}
       </main>
+
+      {/* Updates & reminders — dropdown panel */}
+      {notificationsOpen && (
+        <>
+          <div className="absolute inset-0 z-[110] bg-black/10" onClick={() => setNotificationsOpen(false)} />
+          <div className="absolute top-[60px] left-3 right-3 z-[120] bg-white rounded-2xl shadow-2xl border border-gray-100 max-h-[70vh] flex flex-col animate-in slide-in-from-top-4 fade-in duration-200 overflow-hidden" dir="rtl">
+            <div className="px-4 py-3 border-b border-gray-50 flex items-center justify-between">
+              <h3 className="font-bold text-gray-900 text-sm">עדכונים ותזכורות חשובות</h3>
+              <button onClick={() => setNotificationsOpen(false)} className="text-gray-400 hover:text-gray-600 text-lg">✕</button>
+            </div>
+            <div className="overflow-y-auto divide-y divide-gray-50">
+              {notifications.slice(0, 4).map(n => (
+                <div key={n.id} className="px-4 py-3 flex gap-3 items-start">
+                  <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center text-lg shrink-0">{NOTIF_META[n.category]?.icon}</div>
+                  <div className="flex-1 overflow-hidden">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${n.priority === 'high' ? 'bg-red-100 text-red-600' : 'bg-orange-100 text-orange-600'}`}>
+                        {n.priority === 'high' ? 'חשוב' : 'עדכון'}
+                      </span>
+                      <p className="text-sm font-semibold text-gray-900 truncate">{n.title}</p>
+                    </div>
+                    <p className="text-xs text-gray-500 leading-relaxed">{n.content}</p>
+                    <p className="text-[10px] text-gray-400 font-medium mt-1">{n.date}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={() => { setNotificationsOpen(false); setShowAllNotifications(true); }}
+              className="px-4 py-3 border-t border-gray-50 text-blue-600 font-semibold text-sm hover:bg-blue-50 transition-colors"
+            >
+              לכל העדכונים ›
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* Full updates history */}
+      {showAllNotifications && (
+        <div className="fixed inset-0 z-[200] bg-white flex flex-col animate-in fade-in duration-300" dir="rtl">
+          <div className="w-full max-w-lg mx-auto flex flex-col h-full">
+            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between shrink-0">
+              <button onClick={() => setShowAllNotifications(false)} className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-colors">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+              <h2 className="text-base font-bold text-gray-900">היסטוריית עדכונים</h2>
+              <div className="w-9" />
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-2">
+              {notifications.map(n => (
+                <div key={n.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex gap-3 items-start">
+                  <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-xl shrink-0">{NOTIF_META[n.category]?.icon}</div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${n.priority === 'high' ? 'bg-red-100 text-red-600' : 'bg-orange-100 text-orange-600'}`}>
+                        {NOTIF_META[n.category]?.label}
+                      </span>
+                    </div>
+                    <p className="text-sm font-semibold text-gray-900">{n.title}</p>
+                    <p className="text-xs text-gray-500 leading-relaxed mt-0.5">{n.content}</p>
+                    <p className="text-[10px] text-gray-400 font-medium mt-1">{n.date}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sidebar drawer — stage navigation */}
+      {sidebarOpen && (
+        <div className="fixed inset-0 z-[200] flex" dir="rtl">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setSidebarOpen(false)} />
+          <div className="relative w-72 max-w-[80%] bg-white h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300 mr-0 ml-auto" style={{ marginInlineStart: 'auto' }}>
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+              <h3 className="font-bold text-gray-900">שלב השיקום שלי</h3>
+              <button onClick={() => setSidebarOpen(false)} className="text-gray-400 hover:text-gray-600 text-lg">✕</button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
+              <p className="text-xs font-semibold text-gray-400 px-2 mb-1">מעבר בין שלבים</p>
+              {STAGES.map((stage, idx) => {
+                const isCurrent = stage === currentStage;
+                const currentIdx = STAGES.indexOf(currentStage);
+                const done = idx < currentIdx;
+                return (
+                  <button
+                    key={stage}
+                    onClick={() => changeStage(stage)}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-right transition-colors ${isCurrent ? 'bg-blue-600 text-white' : 'hover:bg-gray-100 text-gray-700'}`}
+                  >
+                    <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${isCurrent ? 'bg-white text-blue-600' : done ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-400'}`}>
+                      {done ? '✓' : idx + 1}
+                    </span>
+                    <span className="font-semibold text-sm">{stage}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* "כל הכבוד" toast */}
+      {toast && (
+        <div className="fixed bottom-28 left-1/2 -translate-x-1/2 z-[300] bg-gray-900 text-white px-5 py-3 rounded-2xl shadow-2xl text-sm font-semibold animate-in slide-in-from-bottom-4 fade-in duration-300 flex items-center gap-2">
+          <span className="text-lg">🎉</span>
+          <span>{toast}</span>
+        </div>
+      )}
+
+      {/* Celebration — all stage tasks completed */}
+      {celebrationStage && (
+        <div className="fixed inset-0 z-[300] bg-gradient-to-b from-green-50 to-white flex flex-col items-center justify-center p-6 animate-in fade-in duration-300" dir="rtl">
+          <div className="text-7xl mb-4 animate-in zoom-in duration-500">🎉</div>
+          <h2 className="text-2xl font-bold text-green-700 mb-2 text-center">כל הכבוד!</h2>
+          <p className="text-base font-semibold text-gray-700 text-center mb-1">השלמת את כל המשימות של שלב</p>
+          <p className="text-lg font-bold text-green-600 mb-8 text-center">{celebrationStage}</p>
+          <button
+            onClick={() => setCelebrationStage(null)}
+            className="bg-gradient-to-r from-green-500 to-green-600 text-white px-8 py-3 rounded-2xl font-semibold text-sm shadow-lg active:scale-95 transition-all"
+          >
+            תודה, ממשיכים! 💪
+          </button>
+        </div>
+      )}
 
       {showIntroForm && (
         <div className="fixed inset-0 z-[150] flex items-end justify-center animate-in fade-in duration-300">
@@ -2027,7 +2405,7 @@ const App: React.FC = () => {
               <button
                 onClick={() => {
                   setShowSocialActivityPopup(false);
-                  setActiveTab('info');
+                  setActiveTab('hospital');
                   setInfoSubView('service-basket' as InfoSubView);
                 }}
                 className="flex-1 py-3.5 bg-gray-100 text-gray-500 rounded-2xl font-bold text-base active:scale-95 transition-all"
@@ -2330,30 +2708,42 @@ const App: React.FC = () => {
       })()}
 
       {/* Bottom Navigation */}
-      <nav className="absolute bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-1 py-3 z-40 flex justify-around items-end shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
-        {[
+      <nav className="absolute bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-0.5 py-2.5 z-40 flex justify-around items-end shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
+        {([
           { id: 'home', label: 'בית', icon: '🏠' },
-          { id: 'info', label: 'העוזר האישי שלי', icon: '💬' },
-          { id: 'notebook', label: 'המחברת שלי', icon: '📝' },
-          { id: 'exercises', label: 'התרגילים שלי', icon: '🏋️', badge: true },
-          { id: 'personal', label: 'אזור שיקומי אישי', icon: '👤', badge: true }
-        ].map(tab => (
-          <button 
-            key={tab.id}
-            onClick={() => { setActiveTab(tab.id as Tab); if (tab.id === 'info') setInfoSubView('grid'); }}
-            className={`flex flex-col items-center gap-1 flex-1 transition-all relative ${activeTab === tab.id || (activeTab === 'faq' && tab.id === 'info') ? 'text-blue-600 scale-105 font-semibold' : 'text-gray-400'}`}
-          >
-            <div className="relative">
-                <span className="text-xl">{tab.icon}</span>
+          { id: 'assistant', label: 'עוזר אישי', icon: '💬' },
+          { id: 'hospital', label: 'בית החולים', icon: '🏥' },
+          { id: 'difficulties', label: 'קשיים נפוצים', icon: '🩹' },
+          { id: 'goals-exercises', label: 'יעדים ותרגילים', icon: '🎯', badge: true },
+          { id: 'medical', label: 'תיק רפואי', icon: '📋' },
+        ] as { id: Tab; label: string; icon: string; badge?: boolean }[]).map(tab => {
+          const isActive = activeTab === tab.id
+            || (tab.id === 'medical' && activeTab === 'faq')
+            || (tab.id === 'home' && activeTab === 'checklist');
+          return (
+            <button
+              key={tab.id}
+              onClick={() => {
+                setActiveTab(tab.id);
+                setLandingSearch('');
+                if (tab.id === 'assistant') setInfoSubView('grid');
+                if (tab.id === 'hospital') setInfoSubView('hospital-home');
+                if (tab.id === 'difficulties') setInfoSubView('diff-home');
+              }}
+              className={`flex flex-col items-center gap-1 flex-1 min-w-0 transition-all relative ${isActive ? 'text-blue-600 font-semibold' : 'text-gray-400'}`}
+            >
+              <div className="relative">
+                <span className="text-lg">{tab.icon}</span>
                 {tab.badge && (
-                    <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white shadow-sm" />
+                  <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white shadow-sm" />
                 )}
-            </div>
-            <span className={`text-[10px] leading-tight text-center h-5 flex items-center px-0.5 overflow-hidden ${activeTab === tab.id || (activeTab === 'faq' && tab.id === 'info') ? 'text-blue-600' : 'text-gray-400 font-medium'}`}>
-              {tab.label}
-            </span>
-          </button>
-        ))}
+              </div>
+              <span className={`text-[11px] leading-tight text-center h-6 flex items-center px-0.5 overflow-hidden ${isActive ? 'text-blue-600' : 'text-gray-400 font-medium'}`}>
+                {tab.label}
+              </span>
+            </button>
+          );
+        })}
       </nav>
     </div>
     </div>

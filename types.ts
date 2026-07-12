@@ -35,11 +35,22 @@ export interface TreatmentSummary {
   nextSessionTime: string;
 }
 
+export type NotificationCategory =
+  | 'action'        // תזכורת לפעולה שהמטופל צריך לבצע
+  | 'day-summary'   // סיכום יום
+  | 'appointment'   // מפגש או בדיקה קרובה
+  | 'team-update'   // עדכון מצוות המחלקה
+  | 'exercise'      // הפניה לתרגול מומלץ
+  | 'rehab-info';   // מידע שיקומי חשוב לפי שלב/תכנית
+
 export interface Notification {
   id: string;
   title: string;
   content: string;
   date: string;
+  category: NotificationCategory;
+  priority: 'medium' | 'high';
+  read?: boolean;
 }
 
 export interface FAQItem {

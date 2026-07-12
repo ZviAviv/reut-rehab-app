@@ -127,6 +127,11 @@ export const MOCK_SCHEDULE: ScheduleItem[] = [
 ];
 
 export const MOCK_NOTIFICATIONS: Notification[] = [
-  { id: 'n1', title: 'תזכורת: טיפול פיזיותרפיה', content: 'הטיפול הבא שלך יתחיל בעוד 15 דקות בחדר 302.', date: '2024-05-22' },
-  { id: 'n2', title: 'עדכון צוות', content: 'ד"ר שפירא יחליף את ד"ר לוי בביקור הבוקר.', date: '2024-05-22' },
+  { id: 'n1', title: 'תזכורת: טיפול פיזיותרפיה', content: 'הטיפול הבא שלך יתחיל בעוד 15 דקות בחדר 302. מומלץ להגיע עם נעלי ספורט.', date: 'היום, 08:45', category: 'appointment', priority: 'high' },
+  { id: 'n2', title: 'עדכון מהצוות', content: 'ד"ר שפירא יחליף את ד"ר לוי בביקור הבוקר.', date: 'היום, 07:30', category: 'team-update', priority: 'medium' },
+  { id: 'n3', title: 'נא לאשר הגעה לפעילות', content: 'פעילות חברתית מוזיקלית היום ב-17:00 בגינה. אנא אשרו הגעה.', date: 'היום, 07:10', category: 'action', priority: 'high' },
+  { id: 'n4', title: 'בדיקת דם מחר בבוקר', content: 'נקבעה לך בדיקת דם מחר ב-06:30. יש להישאר בצום 8 שעות לפני הבדיקה.', date: 'אתמול, 19:20', category: 'appointment', priority: 'high' },
+  { id: 'n5', title: 'תרגול מומלץ להיום', content: 'הפיזיותרפיסטית הוסיפה לך תרגיל חיזוק קרסוליים. מומלץ לבצע 3 סטים.', date: 'אתמול, 16:05', category: 'exercise', priority: 'medium' },
+  { id: 'n6', title: 'סיכום היום שלך מוכן', content: 'צפה בסיכום המפגשים, ההגבלות והתרגולים של היום.', date: 'אתמול, 18:00', category: 'day-summary', priority: 'medium' },
+  { id: 'n7', title: 'מידע שיקומי לשלב זה', content: 'בתקופת ההתאקלמות חשוב לשתף את הצוות בכל קושי פיזי או רגשי. אין ציפייה לשלמות.', date: 'לפני יומיים', category: 'rehab-info', priority: 'medium' },
 ];
